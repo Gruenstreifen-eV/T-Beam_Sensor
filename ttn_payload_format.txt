@@ -1,38 +1,3 @@
-## Intro
-
-This is a simple sketch demonstrating the capability of the [TTGO T-Beam](https://www.aliexpress.com/store/product/TTGO-T-Beam-ESP32-433-868-915Mhz-WiFi-wireless-Bluetooth-Module-ESP-32-GPS-NEO-6M/2090076_32875743018.html) as a TTN Sensor Node on [The Things Network](https://www.thethingsnetwork.org/) LoraWAN.
-
-Derived from [sbiermann/Lora-TTNMapper-ESP32](https://github.com/sbiermann/Lora-TTNMapper-ESP32) and with some information/inspiration from [cyberman54/ESP32-Paxcounter](https://github.com/cyberman54/ESP32-Paxcounter) and [Edzelf/LoRa](https://github.com/Edzelf/LoRa).
-
-## Software dependencies
-
-Arduino IDE [ESP32 extension](https://github.com/espressif/arduino-esp32)
-
-[TinyGPS++](http://arduiniana.org/libraries/tinygpsplus/)
-
-[LMIC-Arduino](https://github.com/matthijskooijman/arduino-lmic) : Make sure to get the last version - *1.5.0+arduino-2* currently - because the arduino IDE library updater is getting confused by the versioning scheme of that library.
-
-[SoftwareSerial](https://github.com/plerup/espsoftwareserial/)
-
-[espSDS011](https://github.com/dok-net/esp_sds011) Dust sensor lib for ESP
-
-[SparkFun HTU21D](https://github.com/sparkfun/SparkFun_HTU21D_Breakout_Arduino_Library) Humidity and Temperature Board
-
-[LoraMessage](https://github.com/thesolarnomad/lora-serialization) LoraWAN serialization/deserialization library for The Things Network 
-
-## Instructions
-
-You need to connect the [T-Beam](https://github.com/LilyGO/TTGO-T-Beam) DIO1 pin marked *Lora1* to the *pin 33* - So that the ESP32 can read that output from the Lora module.
-Optionally you can also connect the *Lora2* output to *GPIO 32*, but this is not needed here.
-
-You can program the T-Beam using the [Arduino ESP32](https://github.com/espressif/arduino-esp32) board 'Heltec_WIFI_LoRa_32'.
- or add
-(http://arduino.esp8266.com/stable/package_esp8266com_index.json) to preferences -> additional board infos and choose TTGO Lora 32-OLED V1 
-
-On The Things Network side, the settings needed are available [here](https://www.thethingsnetwork.org/docs/applications/ttnmapper/).
-
-Configure the Payload decoder with:
-```javascript
 function Decoder(bytes, port) {
   
   var bytesToInt = function(bytes) {
@@ -167,14 +132,4 @@ if (typeof module === 'object' && typeof module.exports !== 'undefined') {
   
   return decode( bytes,[latLng, temperature, temperature, temperature,humidity] ,['latLng', 'PM10', 'PM25', '5ca8b6cb695e3b001a695336', '5ca8b6cb695e3b001a695335' ] )
 }
-
-```
-
-Let me know if more detailed instructions are needed.
-
-## Todolist
-
-* Switch to OTAA auth method for TTN and save the 'credentials' for reboot use.
-* Save the GPS 'status' so that on next boot it gets a fix faster.
-* Reduce the power needed ! That thing is a power hog currently, we need to make it sleep most of the time as possible.
 

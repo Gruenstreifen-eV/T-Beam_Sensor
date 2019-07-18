@@ -1,18 +1,62 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <WiFi.h>
+#include <SoftwareSerial.h>
+#include <Sds011.h>
+#include "LoraMessage.h"
 
 // UPDATE the config.h file in the same folder WITH YOUR TTN KEYS AND ADDR.
 #include "config.h"
-#include "gps.h"
+#include<Wire.h>
+#include <SparkFunHTU21D.h>
+HTU21D myHumidity;
+
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+
+
+#define GPS_TX 12
+#define GPS_RX 15
+
+HardwareSerial GPSSerial(1);
+TinyGPSPlus tGps;
+
+#define SDS_PIN_RX 13
+#define SDS_PIN_TX 14
+
+SoftwareSerial serialSDS (SDS_PIN_RX, SDS_PIN_TX, false, 192);
+Sds011Async< SoftwareSerial > sds011(serialSDS);
 
 // T-Beam specific hardware
 #undef BUILTIN_LED
 #define BUILTIN_LED 21
 
+
+constexpr int pm_tablesize = 20;
+int pm25_table[pm_tablesize];
+int pm10_table[pm_tablesize];
+
+bool is_SDS_running = true;
+
+void start_SDS() {
+  Serial.println("Start wakeup SDS011");
+
+  if (sds011.set_sleep(false)) { is_SDS_running = true; }
+
+  Serial.println("End wakeup SDS011");
+}
+
+void stop_SDS() {
+  Serial.println("Start sleep SDS011");
+
+  if (sds011.set_sleep(true)) { is_SDS_running = false; }
+
+  Serial.println("End sleep SDS011");
+}
+
+
 char s[32]; // used to sprintf for Serial output
-uint8_t txBuffer[9];
-gps gps;
+
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
@@ -111,31 +155,80 @@ void do_send(osjob_t* j) {
   }
   else
   { 
-    if (gps.checkGpsFix())
-    {
-      // Prepare upstream data transmission at the next possible time.
-      gps.buildPacket(txBuffer);
-      LMIC_setTxData2(1, txBuffer, sizeof(txBuffer), 0);
-      Serial.println(F("Packet queued"));
-      digitalWrite(BUILTIN_LED, HIGH);
+    int pm25;
+    int pm10;
+    LoraMessage message;
+    
+    while (GPSSerial.available() )
+          {
+              char data = GPSSerial.read();
+              tGps.encode(data);
+          }
+  
+    message.addLatLng(tGps.location.lat(),tGps.location.lng());
+    sds011.query_data( pm25,pm10, 5);
+    Serial.print("PM10: ");
+    Serial.println(float(pm10) / 10);
+    Serial.print("PM2.5: ");
+    Serial.println(float(pm25) / 10);
+    message.addUint16(pm10 * 10);
+    message.addUint16(pm25 * 10);
+//     
+    myHumidity.begin(); 
+     
+    message.addTemperature(myHumidity.readTemperature());
+    message.addHumidity(myHumidity.readHumidity());
+    Serial.println(myHumidity.readTemperature());
+    Serial.println(myHumidity.readHumidity());
+     
+    LMIC_setTxData2(1, message.getBytes(), message.getLength(), 0);
+    Serial.println(F("Packet queued"));
+    digitalWrite(BUILTIN_LED, HIGH);
     }
-    else
+//    else
     {
       //try again in 3 seconds
-      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(3), do_send);
+//      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(3), do_send);
     }
-  }
   // Next TX is scheduled after TX_COMPLETE event.
 }
 
 void setup() {
   Serial.begin(115200);
-  Serial.println(F("TTN Mapper"));
+  Serial.println(F("TTN Sensor"));
   
   //Turn off WiFi and Bluetooth
   WiFi.mode(WIFI_OFF);
   btStop();
-  gps.init();
+  serialSDS.begin(9600);
+  GPSSerial.begin(9600, SERIAL_8N1, GPS_TX, GPS_RX);
+  GPSSerial.setTimeout(2);
+  myHumidity.begin();
+    
+  Serial.println("SDS011 start/stop and reporting sample");
+  String firmware_version;
+  uint16_t device_id;
+  if (!sds011.device_info(firmware_version, device_id)) {
+    Serial.println("Sds011::firmware_version() failed");
+  }
+  else
+  {
+    Serial.print("Sds011 firmware version: ");
+    Serial.println(firmware_version);
+    Serial.print("Sds011 device id: ");
+    Serial.println(device_id);
+  }
+
+  Sds011::Report_mode report_mode;
+  if (!sds011.get_data_reporting_mode(report_mode)) {
+    Serial.println("Sds011::get_data_reporting_mode() failed");
+  }
+  if (Sds011::REPORT_ACTIVE != report_mode) {
+    Serial.println("Turning on Sds011::REPORT_ACTIVE reporting mode");
+    if (!sds011.set_data_reporting_mode(Sds011::REPORT_ACTIVE)) {
+      Serial.println("Sds011::set_data_reporting_mode(Sds011::REPORT_ACTIVE) failed");
+    }
+  }
 
   // LMIC init
   os_init();
